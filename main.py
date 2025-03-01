@@ -2,7 +2,6 @@ import os
 import json
 import numpy as np
 from sentence_transformers import SentenceTransformer, util
-from rapidfuzz import process, fuzz
 
 # Load model for embedding computation
 model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
@@ -11,8 +10,32 @@ def load_json_files(file_paths):
     data = []
     for file_path in file_paths:
         with open(file_path, 'r', encoding='utf-8') as f:
-            data.extend(json.load(f))
+            file_data = json.load(f)
+
+            # Convert JioMart structure into a standard format
+            if "jiomart" in file_path.lower():
+                file_data = convert_jiomart_format(file_data)
+
+            data.extend(file_data)
     return data
+
+def convert_jiomart_format(jiomart_products):
+    """Convert JioMart structure to match other datasets."""
+    formatted_products = []
+    for product in jiomart_products:
+        formatted_products.append({
+            "title": product["title"],
+            "brand": product.get("brand", ""),
+            "pincode": product.get("pincode"),
+            "url": product["url"],
+            "variant": [{
+                "quantity": product.get("quantity", ""),
+                "mrp": product.get("mrp", ""),
+                "price": product.get("price", ""),
+                "articleId": product["article_id"]
+            }]
+        })
+    return formatted_products
 
 def compute_embeddings(products):
     return {prod['title']: model.encode(prod['title'], convert_to_tensor=True) for prod in products}
@@ -20,7 +43,7 @@ def compute_embeddings(products):
 def clean_title(title):
     return title.lower().strip()
 
-def merge_products(products, embeddings, similarity_threshold=0.90):  # Improved similarity threshold
+def merge_products(products, embeddings, similarity_threshold=0.90):
     merged_products = []
     processed_indices = set()
     
@@ -87,7 +110,6 @@ def merge_products(products, embeddings, similarity_threshold=0.90):  # Improved
             
             merged_products.append(merged_entry)
         else:
-            # If no variants, directly add the product to the merged list
             merged_products.append({
                 "cleanedTitle": cleaned_title,
                 "brand": brand,
@@ -98,7 +120,6 @@ def merge_products(products, embeddings, similarity_threshold=0.90):  # Improved
                 }]
             })
     
-    # Add unmatched products (those not processed in the loop)
     for i, prod in enumerate(products):
         if i not in processed_indices:
             merged_products.append({
@@ -118,7 +139,7 @@ json_files = [
     "/home/dakshchoudhary/Desktop/truPricer/mergejson/newdata/Blinkit-500085-atta-rice-and-dal-products.json",
     "/home/dakshchoudhary/Desktop/truPricer/mergejson/newdata/Dmart-500085-grocery-products.json",
     "/home/dakshchoudhary/Desktop/truPricer/mergejson/newdata/ZeptoNow-500085-atta-rice-oil-dals-products.json",
-    "/home/dakshchoudhary/Desktop/truPricer/mergejson/datasets/JioMartGroceries_500074_2024-04-14.json",
+    "/home/dakshchoudhary/Desktop/truPricer/mergejson/newdata/JioMartGroceries_500074_2024-04-14.json",  # JioMart file included
 ]
 
 data = load_json_files(json_files)
