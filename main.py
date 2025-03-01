@@ -7,17 +7,10 @@ from rapidfuzz import process, fuzz
 # Load model for embedding computation
 model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
 
-# JSON file paths
-json_files = [
-    "/home/dakshchoudhary/Desktop/truPricer/mergejson/newdata/Blinkit-500085-atta-rice-and-dal-products.json",
-    "/home/dakshchoudhary/Desktop/truPricer/mergejson/newdata/Dmart-500085-grocery-products.json",
-    "/home/dakshchoudhary/Desktop/truPricer/mergejson/newdata/ZeptoNow-500085-atta-rice-oil-dals-products.json",
-]
-
-def load_json_files(files):
+def load_json_files(file_paths):
     data = []
-    for file in files:
-        with open(file, 'r', encoding='utf-8') as f:
+    for file_path in file_paths:
+        with open(file_path, 'r', encoding='utf-8') as f:
             data.extend(json.load(f))
     return data
 
@@ -25,59 +18,112 @@ def compute_embeddings(products):
     return {prod['title']: model.encode(prod['title'], convert_to_tensor=True) for prod in products}
 
 def clean_title(title):
-    """Generate a cleaned title for grouping similar products"""
-    # Remove special characters, convert to lowercase, etc.
-    cleaned = title.lower().strip()
-    return cleaned
+    return title.lower().strip()
 
-def merge_products_with_embeddings(products, embeddings, similarity_threshold=0.85):
+def merge_products(products, embeddings, similarity_threshold=0.90):  # Improved similarity threshold
     merged_products = []
     processed_indices = set()
     
     for i, prod1 in enumerate(products):
         if i in processed_indices:
             continue
-            
+
         title1 = prod1['title']
-        embedding1 = embeddings[title1]
-        
-        # Create a new merged product entry
         cleaned_title = clean_title(title1)
         brand = prod1.get('brand', '')
+        embedding1 = embeddings[title1]
         
-        similar_products = [prod1]  # Start with the current product
+        similar_products = [prod1]
         processed_indices.add(i)
-        
-        # Find similar products using embeddings
+
         for j, prod2 in enumerate(products):
             if j in processed_indices or i == j:
                 continue
-                
+            
             title2 = prod2['title']
             embedding2 = embeddings[title2]
-            
-            # Calculate cosine similarity using the embeddings
             similarity = util.pytorch_cos_sim(embedding1, embedding2).item()
             
             if similarity >= similarity_threshold:
                 similar_products.append(prod2)
                 processed_indices.add(j)
         
-        # Create merged product entry
         merged_entry = {
             "cleanedTitle": cleaned_title,
             "brand": brand,
-            "products": similar_products
+            "products": []
         }
-        
-        merged_products.append(merged_entry)
+
+        variants_map = {}
+        for product in similar_products:
+            for variant in product.get("variant", []):
+                quantity = variant.get("quantity", "")
+                article_id = variant.get("articleId", None)
+                platform_url = product.get("url", "")
+                price = variant.get("price", "")
+                mrp = variant.get("mrp", "")
+                
+                if quantity and article_id is not None:
+                    if quantity not in variants_map:
+                        variants_map[quantity] = {
+                            "quantity": quantity,
+                            "mrp": mrp,
+                            "prices": []
+                        }
+                    
+                    price_entry = {
+                        "articleId": article_id,
+                        "platformUrl": platform_url,
+                        "price": price
+                    }
+                    variants_map[quantity]["prices"].append(price_entry)
+
+        if variants_map:
+            merged_entry["products"].append({
+                "title": title1,
+                "variant": list(variants_map.values()),
+                "pincode": prod1.get("pincode", None)
+            })
+            
+            merged_products.append(merged_entry)
+        else:
+            # If no variants, directly add the product to the merged list
+            merged_products.append({
+                "cleanedTitle": cleaned_title,
+                "brand": brand,
+                "products": [{
+                    "title": title1,
+                    "variant": prod1.get("variant", []),
+                    "pincode": prod1.get("pincode", None)
+                }]
+            })
+    
+    # Add unmatched products (those not processed in the loop)
+    for i, prod in enumerate(products):
+        if i not in processed_indices:
+            merged_products.append({
+                "cleanedTitle": clean_title(prod['title']),
+                "brand": prod.get('brand', ''),
+                "products": [{
+                    "title": prod['title'],
+                    "variant": prod.get("variant", []),
+                    "pincode": prod.get("pincode", None)
+                }]
+            })
     
     return merged_products
 
-# Load and process data
+# File paths (update with actual paths)
+json_files = [
+    "/home/dakshchoudhary/Desktop/truPricer/mergejson/newdata/Blinkit-500085-atta-rice-and-dal-products.json",
+    "/home/dakshchoudhary/Desktop/truPricer/mergejson/newdata/Dmart-500085-grocery-products.json",
+    "/home/dakshchoudhary/Desktop/truPricer/mergejson/newdata/ZeptoNow-500085-atta-rice-oil-dals-products.json",
+    "/home/dakshchoudhary/Desktop/truPricer/mergejson/datasets/JioMartGroceries_500074_2024-04-14.json",
+]
+
 data = load_json_files(json_files)
 embeddings = compute_embeddings(data)
-merged_data = merge_products_with_embeddings(data, embeddings)
+merged_data = merge_products(data, embeddings)
 
 # Save merged JSON
 output_file = '/home/dakshchoudhary/Desktop/truPricer/mergejson/outputmerge/merged_grocery_products.json'

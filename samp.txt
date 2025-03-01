@@ -1,0 +1,5 @@
+"/home/dakshchoudhary/Desktop/truPricer/mergejson/newdata/Blinkit-500085-atta-rice-and-dal-products.json",
+    "/home/dakshchoudhary/Desktop/truPricer/mergejson/newdata/Dmart-500085-grocery-products.json",
+    "/home/dakshchoudhary/Desktop/truPricer/mergejson/newdata/ZeptoNow-500085-atta-rice-oil-dals-products.json",
+    "/home/dakshchoudhary/Desktop/truPricer/mergejson/datasets/JioMartGroceries_500074_2024-04-14.json",
+ 
